@@ -10,7 +10,7 @@ export default {
         content: { type: Object, required: true },
         wwElementState: { type: Object, required: true },
         /* wwEditor:start */
-        wwEditorState: { type: Object, required: true },
+        wwEditorState: { type: Object, required: false, default: null },
         /* wwEditor:end */
     },
     emits: ['trigger-event', 'add-state', 'remove-state'],
@@ -24,9 +24,12 @@ export default {
     computed: {
         isEditing() {
             /* wwEditor:start */
+            // Safely handle cases where the editor runtime or state isn't present
+            if (!this.wwEditorState || typeof wwLib === 'undefined' || !wwLib.wwEditorHelper) {
+                return false;
+            }
             return this.wwEditorState.editMode === wwLib.wwEditorHelper.EDIT_MODES.EDITION;
             /* wwEditor:end */
-            // eslint-disable-next-line no-unreachable
             return false;
         },
         rootMargin() {
@@ -106,7 +109,7 @@ export default {
         handleIntersection(entries) {
             console.log('[jp-observer] handleIntersection called with', entries.length, 'entries');
 
-            entries.forEach((entry) => {
+            entries.forEach(entry => {
                 console.log('[jp-observer] Entry:', {
                     isIntersecting: entry.isIntersecting,
                     intersectionRatio: entry.intersectionRatio,
