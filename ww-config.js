@@ -1,55 +1,103 @@
 export default {
     options: {
         lazyHydrate: true,
-        displayAllowedValues: (content, wwProps) => wwProps?.overrideDisplayValues ?? [
-            'flex',
-            'block',
-            'grid',
-            'table-cell',
-            'table-row',
-            'table-header-group',
-            'inline-flex',
-            'inline-block',
-            'inline-grid',
-        ],
-        linkable: true,
     },
-    inherit: [{ type: 'ww-layout' }, { type: 'ww-background-video' }],
+    states: ['intersecting'],
+    triggerEvents: [
+        {
+            name: 'intersect',
+            label: { en: 'On intersect' },
+            event: {
+                isIntersecting: true,
+                intersectionRatio: 0,
+            },
+            default: true,
+        },
+        {
+            name: 'leave',
+            label: { en: 'On leave viewport' },
+            event: {
+                isIntersecting: false,
+            },
+        },
+    ],
     editor: {
         label: {
-            en: 'Flexbox',
+            en: 'Intersection Observer',
         },
-        icon: 'border',
+        icon: 'eye',
         bubble: {
-            icon: 'border',
+            icon: 'eye',
         },
-        customStylePropertiesOrder: ['children'],
     },
     properties: {
-        children: {
+        rootMargin: {
             label: {
-                en: 'Items',
-                fr: 'Items',
+                en: 'Root margin',
+                fr: 'Marge racine',
             },
-            type: 'Repeat',
+            type: 'Text',
             options: {
-                text: { en: 'Elements to repeat' },
+                placeholder: '0px',
             },
-            hidden: (content, sidePanelContent, boundProps, wwProps) => !!(wwProps && wwProps.isFixed) || wwProps.noDropzone,
-            bindable: 'repeatable',
-            defaultValue: [],
+            section: 'settings',
+            bindable: true,
+            defaultValue: '0px',
             /* wwEditor:start */
             bindingValidation: {
-                validations: [
-                    {
-                        type: 'array',
-                    },
-                    {
-                        type: 'object',
-                    },
+                type: 'string',
+                tooltip: 'CSS margin string: "10px", "10px 20px", "10% 5%"',
+            },
+            propertyHelp: {
+                tooltip: 'Margin around the root. Can be similar to CSS margin: "10px", "5px 10px 15px 20px"',
+            },
+            /* wwEditor:end */
+        },
+        observerMode: {
+            label: {
+                en: 'Observer mode',
+                fr: 'Mode observateur',
+            },
+            type: 'TextSelect',
+            options: {
+                options: [
+                    { value: 'once', label: { en: 'Once (trigger only first time)' } },
+                    { value: 'repeat', label: { en: 'Repeat (trigger every time)' } },
                 ],
+            },
+            section: 'settings',
+            defaultValue: 'once',
+            bindable: true,
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'string',
+                tooltip: 'Either "once" or "repeat"',
+            },
+            /* wwEditor:end */
+        },
+        threshold: {
+            label: {
+                en: 'Threshold',
+                fr: 'Seuil',
+            },
+            type: 'Number',
+            options: {
+                min: 0,
+                max: 1,
+                step: 0.1,
+            },
+            section: 'settings',
+            defaultValue: 0,
+            bindable: true,
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'number',
                 tooltip:
-                    'A collection or an array of data: \n\n`myCollection` or `[{}, {}, ...] || ["string1", "string2", ...] || [1, 2, ...]`',
+                    'Number between 0 and 1 representing percentage of visibility required: 0 = any pixel, 0.5 = 50%, 1 = 100%',
+            },
+            propertyHelp: {
+                tooltip:
+                    'Percentage of element that must be visible (0-1). 0 = trigger when any part is visible, 1 = trigger when fully visible.',
             },
             /* wwEditor:end */
         },

@@ -1,6 +1,7 @@
 {
-    "name": "ww-flexbox",
-    "version": "3.1.1",
+    "name": "jp-observer",
+    "version": "1.0.0",
+    "description": "Intersection Observer component for WeWeb",
     "scripts": {
         "build": "weweb build",
         "serve": "weweb serve"

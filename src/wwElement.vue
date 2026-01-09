@@ -1,40 +1,7 @@
 <template>
-    <wwSimpleLayout
-        :tag="tag"
-        v-if="noDropzone"
-        class="ww-flexbox"
-        ww-responsive="wwLayoutSlot"
-        v-bind="properties"
-        :class="{ '-link': hasLink && !isEditing }"
-    >
+    <div ref="observerRoot" class="ww-observer" :class="{ '-intersecting': isIntersecting }">
         <slot></slot>
-    </wwSimpleLayout>
-    <wwLayout
-        v-else
-        class="ww-flexbox"
-        path="children"
-        :direction="content.direction"
-        :disable-edit="isFixed"
-        ww-responsive="wwLayout"
-        :tag="tag"
-        v-bind="properties"
-        :class="{ '-link': hasLink && !isEditing }"
-    >
-        <template #header>
-            <wwBackgroundVideo v-if="backgroundVideo" :video="backgroundVideo"></wwBackgroundVideo>
-            <slot v-if="!noDropzone"></slot>
-        </template>
-        <template #default="{ item, index, itemStyle }">
-            <wwElement
-                v-bind="item"
-                :extra-style="itemStyle"
-                class="ww-flexbox__object"
-                :ww-responsive="`wwobject-${index}`"
-                :data-ww-flexbox-index="index"
-                @click="onElementClick"
-            ></wwElement>
-        </template>
-    </wwLayout>
+    </div>
 </template>
 
 <script>
@@ -46,31 +13,15 @@ export default {
         wwEditorState: { type: Object, required: true },
         /* wwEditor:end */
     },
-    emits: ['update:content:effect', 'update:content', 'element-event'],
-    setup() {
-        const { hasLink, tag, properties } = wwLib.wwElement.useLink();
-        const backgroundVideo = wwLib.wwElement.useBackgroundVideo();
-
+    emits: ['trigger-event', 'add-state', 'remove-state'],
+    data() {
         return {
-            hasLink,
-            properties,
-            backgroundVideo,
-            tag,
+            observer: null,
+            isIntersecting: false,
+            hasTriggered: false,
         };
     },
     computed: {
-        children() {
-            if (!this.content.children || !Array.isArray(this.content.children)) {
-                return [];
-            }
-            return this.content.children;
-        },
-        isFixed() {
-            return this.wwElementState.props.isFixed;
-        },
-        noDropzone() {
-            return this.wwElementState.props.noDropzone;
-        },
         isEditing() {
             /* wwEditor:start */
             return this.wwEditorState.editMode === wwLib.wwEditorHelper.EDIT_MODES.EDITION;
@@ -78,24 +29,137 @@ export default {
             // eslint-disable-next-line no-unreachable
             return false;
         },
+        rootMargin() {
+            return this.content.rootMargin || '0px';
+        },
+        threshold() {
+            return this.content.threshold !== undefined ? this.content.threshold : 0;
+        },
+        observerMode() {
+            return this.content.observerMode || 'once';
+        },
+    },
+    watch: {
+        rootMargin() {
+            if (!this.isEditing) {
+                this.initObserver();
+            }
+        },
+        threshold() {
+            if (!this.isEditing) {
+                this.initObserver();
+            }
+        },
+        observerMode(newMode) {
+            // Reset hasTriggered when switching to repeat mode
+            if (newMode === 'repeat') {
+                this.hasTriggered = false;
+            }
+            if (!this.isEditing) {
+                this.initObserver();
+            }
+        },
+    },
+    mounted() {
+        // Don't observe in editor mode
+        if (this.isEditing) return;
+
+        this.initObserver();
+    },
+    beforeUnmount() {
+        this.cleanupObserver();
     },
     methods: {
-        onElementClick(event) {
-            // We would prefer having the index inside the callback in the template, but due to a strange way Vue is handling anynmous functions with scope slot, we need to pass the index as a data attribute or each time the parent rerender, all the children will also rerender
-            let rawIndex = event.currentTarget.dataset.wwFlexboxIndex;
-
-            let index = parseInt(rawIndex);
-            if (isNaN(index)) {
-                index = 0;
+        initObserver() {
+            // Check if IntersectionObserver is available (SSR compatibility)
+            if (typeof window === 'undefined' || !window.IntersectionObserver) {
+                console.warn('IntersectionObserver not available');
+                return;
             }
-            this.$emit('element-event', { type: 'click', index });
+
+            // Clean up any existing observer
+            this.cleanupObserver();
+
+            // Create intersection observer
+            const options = {
+                root: null, // viewport
+                rootMargin: this.rootMargin,
+                threshold: this.threshold,
+            };
+
+            this.observer = new IntersectionObserver(this.handleIntersection, options);
+
+            // Observe the root element
+            if (this.$refs.observerRoot) {
+                this.observer.observe(this.$refs.observerRoot);
+            }
+        },
+
+        handleIntersection(entries) {
+            entries.forEach((entry) => {
+                const wasIntersecting = this.isIntersecting;
+                this.isIntersecting = entry.isIntersecting;
+
+                // Update state
+                if (entry.isIntersecting) {
+                    this.$emit('add-state', 'intersecting');
+                } else {
+                    this.$emit('remove-state', 'intersecting');
+                }
+
+                // Handle intersect event
+                if (entry.isIntersecting) {
+                    // Check if we should trigger based on mode
+                    if (this.observerMode === 'once' && this.hasTriggered) {
+                        return; // Already triggered once, skip
+                    }
+
+                    this.hasTriggered = true;
+
+                    this.$emit('trigger-event', {
+                        name: 'intersect',
+                        event: {
+                            isIntersecting: true,
+                            intersectionRatio: entry.intersectionRatio,
+                            boundingClientRect: entry.boundingClientRect,
+                            time: entry.time,
+                        },
+                    });
+
+                    // If mode is 'once', disconnect after first trigger
+                    if (this.observerMode === 'once') {
+                        this.cleanupObserver();
+                    }
+                } else if (wasIntersecting && !entry.isIntersecting) {
+                    // Element left viewport - emit leave event
+                    this.$emit('trigger-event', {
+                        name: 'leave',
+                        event: {
+                            isIntersecting: false,
+                        },
+                    });
+                }
+            });
+        },
+
+        cleanupObserver() {
+            if (this.observer) {
+                this.observer.disconnect();
+                this.observer = null;
+            }
         },
     },
 };
 </script>
 
 <style lang="scss" scoped>
-.-link {
-    cursor: pointer;
+.ww-observer {
+    // Minimal base styling
+    // Users can add custom styles via WeWeb editor
+
+    &.-intersecting {
+        // State class for custom styling
+        // No default styles - let users define via editor
+    }
 }
 </style>
