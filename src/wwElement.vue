@@ -64,23 +64,40 @@ export default {
         },
     },
     mounted() {
-        // Don't observe in editor mode
-        if (this.isEditing) return;
+    if (this.isEditing) return;
 
-        // Use nextTick AND add a small delay for SPA hydration
-        this.$nextTick(() => {
-            // Add safety check
-            if (!this.$refs.observerRoot) {
-                setTimeout(() => this.initObserver(), 100);
-                return;
-            }
+    // Wait for slot content to be fully rendered
+    this.$nextTick(() => {
+        // Check if slot has content
+        const hasSlotContent = this.$refs.observerRoot &&
+                               this.$refs.observerRoot.children.length > 0;
+
+        if (!hasSlotContent) {
+            console.warn('[jp-observer] No slot content yet, waiting...');
+            // Use MutationObserver to watch for slot content
+            this.waitForSlotContent();
+        } else {
             this.initObserver();
-        });
-    },
+        }
+    });
+},
     beforeUnmount() {
         this.cleanupObserver();
     },
     methods: {
+        waitForSlotContent() {
+        const checkContent = () => {
+            if (this.$refs.observerRoot && this.$refs.observerRoot.children.length > 0) {
+                console.log('[jp-observer] Slot content ready, initializing');
+                this.initObserver();
+            } else {
+                // Keep checking
+                requestAnimationFrame(checkContent);
+            }
+        };
+
+        requestAnimationFrame(checkContent);
+    }
         initObserver() {
             // Check if IntersectionObserver is available (SSR compatibility)
             if (typeof window === 'undefined' || !window.IntersectionObserver) {
