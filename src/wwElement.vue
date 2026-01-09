@@ -67,8 +67,14 @@ export default {
         // Don't observe in editor mode
         if (this.isEditing) return;
 
-        // Use nextTick to ensure DOM is fully rendered
+        // Use nextTick AND add a small delay for SPA hydration
         this.$nextTick(() => {
+            // Add safety check
+            if (!this.$refs.observerRoot) {
+                console.warn('[jp-observer] observerRoot not available, retrying...');
+                setTimeout(() => this.initObserver(), 100);
+                return;
+            }
             this.initObserver();
         });
     },
