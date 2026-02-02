@@ -1,101 +1,189 @@
 <template>
-    <wwSimpleLayout
-        :tag="tag"
-        v-if="noDropzone"
-        class="ww-flexbox"
-        ww-responsive="wwLayoutSlot"
-        v-bind="properties"
-        :class="{ '-link': hasLink && !isEditing }"
-    >
-        <slot></slot>
-    </wwSimpleLayout>
-    <wwLayout
-        v-else
-        class="ww-flexbox"
-        path="children"
-        :direction="content.direction"
-        :disable-edit="isFixed"
-        ww-responsive="wwLayout"
-        :tag="tag"
-        v-bind="properties"
-        :class="{ '-link': hasLink && !isEditing }"
-    >
-        <template #header>
-            <wwBackgroundVideo v-if="backgroundVideo" :video="backgroundVideo"></wwBackgroundVideo>
-            <slot v-if="!noDropzone"></slot>
-        </template>
-        <template #default="{ item, index, itemStyle }">
-            <wwElement
-                v-bind="item"
-                :extra-style="itemStyle"
-                class="ww-flexbox__object"
-                :ww-responsive="`wwobject-${index}`"
-                :data-ww-flexbox-index="index"
-                @click="onElementClick"
-            ></wwElement>
-        </template>
-    </wwLayout>
+    <div ref="observerRoot" class="ww-observer" :class="{ '-intersecting': intersectingValue }">
+        <wwLayout path="children" direction="column" class="observer-content" />
+    </div>
 </template>
 
 <script>
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
+
 export default {
     props: {
+        uid: { type: String, required: true },
         content: { type: Object, required: true },
         wwElementState: { type: Object, required: true },
         /* wwEditor:start */
-        wwEditorState: { type: Object, required: true },
+        wwEditorState: { type: Object, required: false, default: null },
         /* wwEditor:end */
     },
-    emits: ['update:content:effect', 'update:content', 'element-event'],
-    setup() {
-        const { hasLink, tag, properties } = wwLib.wwElement.useLink();
-        const backgroundVideo = wwLib.wwElement.useBackgroundVideo();
+    emits: ['trigger-event', 'add-state', 'remove-state'],
+    setup(props, { emit }) {
+        const observerRoot = ref(null);
+        let observer = null;
+        const hasTriggered = ref(false);
 
-        return {
-            hasLink,
-            properties,
-            backgroundVideo,
-            tag,
-        };
-    },
-    computed: {
-        children() {
-            if (!this.content.children || !Array.isArray(this.content.children)) {
-                return [];
-            }
-            return this.content.children;
-        },
-        isFixed() {
-            return this.wwElementState.props.isFixed;
-        },
-        noDropzone() {
-            return this.wwElementState.props.noDropzone;
-        },
-        isEditing() {
+        const { value: intersectingValue, setValue: setIntersecting } = wwLib.wwVariable.useComponentVariable({
+            uid: props.uid,
+            name: 'intersecting',
+            type: 'boolean',
+            defaultValue: false,
+        });
+
+        const isEditing = computed(() => {
             /* wwEditor:start */
-            return this.wwEditorState.editMode === wwLib.wwEditorHelper.EDIT_MODES.EDITION;
+            if (typeof wwLib === 'undefined' || !wwLib.wwEditorHelper) {
+                return false;
+            }
+            const editMode = props.wwEditorState?.editMode;
+            return editMode === wwLib.wwEditorHelper.EDIT_MODES.EDITION;
             /* wwEditor:end */
             // eslint-disable-next-line no-unreachable
             return false;
-        },
-    },
-    methods: {
-        onElementClick(event) {
-            // We would prefer having the index inside the callback in the template, but due to a strange way Vue is handling anynmous functions with scope slot, we need to pass the index as a data attribute or each time the parent rerender, all the children will also rerender
-            let rawIndex = event.currentTarget.dataset.wwFlexboxIndex;
+        });
 
-            let index = parseInt(rawIndex);
-            if (isNaN(index)) {
-                index = 0;
+        const rootMargin = computed(() => `${props.content?.rootMargin ?? 0}px`);
+        const threshold = computed(() => props.content?.threshold ?? 0);
+        const observerMode = computed(() => props.content?.observerMode || 'once');
+
+        const cleanupObserver = () => {
+            if (observer) {
+                observer.disconnect();
+                observer = null;
             }
-            this.$emit('element-event', { type: 'click', index });
-        },
+        };
+
+        const handleIntersection = entries => {
+            entries.forEach(entry => {
+                const wasIntersecting = intersectingValue.value;
+                const nowIntersecting = entry.isIntersecting;
+
+                setIntersecting(nowIntersecting);
+
+                if (nowIntersecting) {
+                    emit('add-state', 'intersecting');
+                } else {
+                    emit('remove-state', 'intersecting');
+                }
+
+                if (nowIntersecting) {
+                    if (observerMode.value === 'once' && hasTriggered.value) {
+                        return;
+                    }
+
+                    hasTriggered.value = true;
+
+                    emit('trigger-event', {
+                        name: 'intersect',
+                        event: {
+                            isIntersecting: true,
+                            intersectionRatio: entry.intersectionRatio,
+                            boundingClientRect: {
+                                top: entry.boundingClientRect.top,
+                                right: entry.boundingClientRect.right,
+                                bottom: entry.boundingClientRect.bottom,
+                                left: entry.boundingClientRect.left,
+                                width: entry.boundingClientRect.width,
+                                height: entry.boundingClientRect.height,
+                            },
+                            time: entry.time,
+                        },
+                    });
+
+                    if (observerMode.value === 'once') {
+                        cleanupObserver();
+                    }
+                } else if (wasIntersecting && !nowIntersecting) {
+                    emit('trigger-event', {
+                        name: 'leave',
+                        event: {
+                            isIntersecting: false,
+                        },
+                    });
+                }
+            });
+        };
+
+        const initObserver = () => {
+            const frontWindow = wwLib.getFrontWindow();
+
+            if (!frontWindow?.IntersectionObserver) {
+                return;
+            }
+
+            cleanupObserver();
+
+            const options = {
+                root: null,
+                rootMargin: rootMargin.value,
+                threshold: threshold.value,
+            };
+
+            observer = new frontWindow.IntersectionObserver(handleIntersection, options);
+
+            if (observerRoot.value) {
+                observer.observe(observerRoot.value);
+            }
+        };
+
+        const initWithDelay = () => {
+            setTimeout(() => {
+                if (observerRoot.value) {
+                    initObserver();
+                }
+            }, 100);
+        };
+
+        watch(
+            () => [props.content?.rootMargin, props.content?.threshold],
+            () => {
+                if (!isEditing.value) {
+                    initObserver();
+                }
+            },
+            { deep: true }
+        );
+
+        watch(
+            () => props.content?.observerMode,
+            newMode => {
+                if (newMode === 'repeat') {
+                    hasTriggered.value = false;
+                }
+                if (!isEditing.value) {
+                    initObserver();
+                }
+            }
+        );
+
+        onMounted(() => {
+            if (isEditing.value) return;
+
+            nextTick(() => {
+                initWithDelay();
+            });
+        });
+
+        onBeforeUnmount(() => {
+            cleanupObserver();
+        });
+
+        return {
+            observerRoot,
+            intersectingValue,
+        };
     },
 };
 </script>
 
 <style lang="scss" scoped>
-.-link {
-    cursor: pointer;
+.ww-observer {
+    width: 100%;
+    height: auto;
+    min-height: 1px;
+}
+
+.observer-content {
+    width: 100%;
+    height: 100%;
 }
 </style>

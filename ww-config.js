@@ -1,55 +1,109 @@
 export default {
     options: {
         lazyHydrate: true,
-        displayAllowedValues: (content, wwProps) => wwProps?.overrideDisplayValues ?? [
-            'flex',
-            'block',
-            'grid',
-            'table-cell',
-            'table-row',
-            'table-header-group',
-            'inline-flex',
-            'inline-block',
-            'inline-grid',
-        ],
-        linkable: true,
     },
-    inherit: [{ type: 'ww-layout' }, { type: 'ww-background-video' }],
+    states: ['intersecting'],
+    triggerEvents: [
+        {
+            name: 'intersect',
+            label: { en: 'On intersect' },
+            event: {
+                isIntersecting: true,
+                intersectionRatio: 0,
+                boundingClientRect: {},
+                time: 0,
+            },
+            default: true,
+        },
+        {
+            name: 'leave',
+            label: { en: 'On leave viewport' },
+            event: {
+                isIntersecting: false,
+            },
+        },
+    ],
     editor: {
         label: {
-            en: 'Flexbox',
+            en: 'Intersection Observer',
         },
-        icon: 'border',
+        icon: 'eye',
         bubble: {
-            icon: 'border',
+            icon: 'eye',
         },
-        customStylePropertiesOrder: ['children'],
     },
     properties: {
         children: {
-            label: {
-                en: 'Items',
-                fr: 'Items',
-            },
-            type: 'Repeat',
-            options: {
-                text: { en: 'Elements to repeat' },
-            },
-            hidden: (content, sidePanelContent, boundProps, wwProps) => !!(wwProps && wwProps.isFixed) || wwProps.noDropzone,
-            bindable: 'repeatable',
+            hidden: true,
             defaultValue: [],
+        },
+        rootMargin: {
+            label: {
+                en: 'Root margin',
+            },
+            type: 'Number',
+            options: {
+                min: -1000,
+                max: 1000,
+                step: 10,
+            },
+            section: 'settings',
+            bindable: true,
+            defaultValue: 0,
             /* wwEditor:start */
             bindingValidation: {
-                validations: [
-                    {
-                        type: 'array',
-                    },
-                    {
-                        type: 'object',
-                    },
+                type: 'number',
+                tooltip: 'Margin in pixels. Use negative values to trigger earlier.',
+            },
+            propertyHelp: {
+                tooltip: 'Margin around the viewport in pixels. Positive values extend the trigger area, negative values (e.g., -100) trigger before the element enters the viewport.',
+            },
+            /* wwEditor:end */
+        },
+        threshold: {
+            label: {
+                en: 'Threshold',
+            },
+            type: 'Number',
+            options: {
+                min: 0,
+                max: 1,
+                step: 0.1,
+            },
+            section: 'settings',
+            defaultValue: 0,
+            bindable: true,
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'number',
+                tooltip: 'Number between 0 and 1 representing visibility percentage: 0 = any pixel, 0.5 = 50%, 1 = 100%',
+            },
+            propertyHelp: {
+                tooltip: 'Percentage of element that must be visible (0-1). 0 = trigger when any part is visible, 1 = trigger when fully visible.',
+            },
+            /* wwEditor:end */
+        },
+        observerMode: {
+            label: {
+                en: 'Observer mode',
+            },
+            type: 'TextSelect',
+            options: {
+                options: [
+                    { value: 'once', label: { en: 'Once (trigger only first time)' } },
+                    { value: 'repeat', label: { en: 'Repeat (trigger every time)' } },
                 ],
-                tooltip:
-                    'A collection or an array of data: \n\n`myCollection` or `[{}, {}, ...] || ["string1", "string2", ...] || [1, 2, ...]`',
+            },
+            section: 'settings',
+            defaultValue: 'once',
+            bindable: true,
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'string',
+                tooltip: 'Either "once" or "repeat"',
+            },
+            propertyHelp: {
+                tooltip: 'Once: triggers only on first intersection. Repeat: triggers every time element enters/leaves viewport.',
             },
             /* wwEditor:end */
         },
