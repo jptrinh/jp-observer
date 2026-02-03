@@ -44,7 +44,7 @@ export default {
             type: 'Number',
             options: {
                 min: -1000,
-                max: 1000,
+                max: 0,
                 step: 10,
             },
             section: 'settings',
@@ -53,10 +53,10 @@ export default {
             /* wwEditor:start */
             bindingValidation: {
                 type: 'number',
-                tooltip: 'Margin in pixels. Use negative values to trigger earlier.',
+                tooltip: 'Margin in pixels. Use negative values to delay trigger.',
             },
             propertyHelp: {
-                tooltip: 'Margin around the viewport in pixels. Positive values extend the trigger area, negative values (e.g., -100) trigger before the element enters the viewport.',
+                tooltip: 'Offset in pixels. 0 = trigger at viewport edge. Negative values (e.g., -100) = trigger after element is 100px inside viewport.',
             },
             /* wwEditor:end */
         },
@@ -95,7 +95,7 @@ export default {
                 ],
             },
             section: 'settings',
-            defaultValue: 'once',
+            defaultValue: 'repeat',
             bindable: true,
             /* wwEditor:start */
             bindingValidation: {

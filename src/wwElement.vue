@@ -28,7 +28,7 @@ export default {
 
         const rootMargin = computed(() => `${props.content?.rootMargin ?? 0}px`);
         const threshold = computed(() => props.content?.threshold ?? 0);
-        const observerMode = computed(() => props.content?.observerMode || 'once');
+        const observerMode = computed(() => props.content?.observerMode || 'repeat');
 
         const cleanupObserver = () => {
             if (observer) {
