@@ -110,5 +110,23 @@ export default {
             },
             /* wwEditor:end */
         },
+        skipInitial: {
+            label: {
+                en: 'Skip initial trigger',
+            },
+            type: 'OnOff',
+            section: 'settings',
+            defaultValue: true,
+            bindable: true,
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'boolean',
+                tooltip: 'Skip the first intersection check on page load',
+            },
+            propertyHelp: {
+                tooltip: 'When enabled, ignores the initial intersection that fires on page load before content has fully loaded. Prevents false triggers.',
+            },
+            /* wwEditor:end */
+        },
     },
 };

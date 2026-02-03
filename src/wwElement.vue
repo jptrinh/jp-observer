@@ -18,6 +18,7 @@ export default {
         const observerRoot = ref(null);
         let observer = null;
         const hasTriggered = ref(false);
+        const isInitialized = ref(false);
 
         const { value: intersectingValue, setValue: setIntersecting } = wwLib.wwVariable.useComponentVariable({
             uid: props.uid,
@@ -29,6 +30,7 @@ export default {
         const rootMargin = computed(() => `${props.content?.rootMargin ?? 0}px`);
         const threshold = computed(() => props.content?.threshold ?? 0);
         const observerMode = computed(() => props.content?.observerMode || 'repeat');
+        const skipInitial = computed(() => props.content?.skipInitial ?? true);
 
         const cleanupObserver = () => {
             if (observer) {
@@ -39,6 +41,19 @@ export default {
 
         const handleIntersection = entries => {
             entries.forEach(entry => {
+                // Skip the initial callback that fires immediately after observe()
+                if (!isInitialized.value) {
+                    isInitialized.value = true;
+                    if (skipInitial.value) {
+                        // Set initial state without triggering events
+                        setIntersecting(entry.isIntersecting);
+                        if (entry.isIntersecting) {
+                            emit('add-state', 'intersecting');
+                        }
+                        return;
+                    }
+                }
+
                 const wasIntersecting = intersectingValue.value;
                 const nowIntersecting = entry.isIntersecting;
 
@@ -96,6 +111,7 @@ export default {
             }
 
             cleanupObserver();
+            isInitialized.value = false;
 
             const options = {
                 root: null,
@@ -119,7 +135,7 @@ export default {
         };
 
         watch(
-            () => [props.content?.rootMargin, props.content?.threshold],
+            () => [props.content?.rootMargin, props.content?.threshold, props.content?.skipInitial],
             () => {
                 initObserver();
             },
