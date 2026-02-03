@@ -1,7 +1,6 @@
 {
     "name": "jp-observer",
-    "version": "1.0.0",
-    "description": "Intersection Observer component for WeWeb",
+    "version": "3.1.1",
     "scripts": {
         "build": "weweb build",
         "serve": "weweb serve"

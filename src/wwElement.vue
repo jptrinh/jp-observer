@@ -1,168 +1,84 @@
 <template>
-    <div ref="observerRoot" class="ww-observer" :class="{ '-intersecting': isIntersecting }">
-        <slot></slot>
+    <div ref="observerRoot" class="ww-observer" :class="{ '-intersecting': intersectingValue }">
+        <wwLayout path="children" direction="column" class="observer-content" />
     </div>
 </template>
 
 <script>
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
+
 export default {
     props: {
+        uid: { type: String, required: true },
         content: { type: Object, required: true },
         wwElementState: { type: Object, required: true },
-        /* wwEditor:start */
-        wwEditorState: { type: Object, required: false, default: null },
-        /* wwEditor:end */
     },
     emits: ['trigger-event', 'add-state', 'remove-state'],
-    data() {
-        return {
-            observer: null,
-            isIntersecting: false,
-            hasTriggered: false,
-        };
-    },
-    computed: {
-        isEditing() {
-            /* wwEditor:start */
-            // Safely handle cases where the editor runtime or state isn't present
-            if (!this.wwEditorState || typeof wwLib === 'undefined' || !wwLib.wwEditorHelper) {
-                return false;
-            }
-            return this.wwEditorState.editMode === wwLib.wwEditorHelper.EDIT_MODES.EDITION;
-            /* wwEditor:end */
-            return false;
-        },
-        rootMargin() {
-            return this.content.rootMargin || '0px';
-        },
-        threshold() {
-            return this.content.threshold !== undefined ? this.content.threshold : 0;
-        },
-        observerMode() {
-            return this.content.observerMode || 'once';
-        },
-    },
-    watch: {
-        rootMargin() {
-            if (!this.isEditing) {
-                this.initObserver();
-            }
-        },
-        threshold() {
-            if (!this.isEditing) {
-                this.initObserver();
-            }
-        },
-        observerMode(newMode) {
-            // Reset hasTriggered when switching to repeat mode
-            if (newMode === 'repeat') {
-                this.hasTriggered = false;
-            }
-            if (!this.isEditing) {
-                this.initObserver();
-            }
-        },
-    },
-    mounted() {
-    if (this.isEditing) return;
+    setup(props, { emit }) {
+        const observerRoot = ref(null);
+        let observer = null;
+        const hasTriggered = ref(false);
 
-    // Wait for slot content to be fully rendered
-    this.$nextTick(() => {
-        // Check if slot has content
-        const hasSlotContent = this.$refs.observerRoot &&
-                               this.$refs.observerRoot.children.length > 0;
+        const { value: intersectingValue, setValue: setIntersecting } = wwLib.wwVariable.useComponentVariable({
+            uid: props.uid,
+            name: 'intersecting',
+            type: 'boolean',
+            defaultValue: false,
+        });
 
-        if (!hasSlotContent) {
-            console.warn('[jp-observer] No slot content yet, waiting...');
-            // Use MutationObserver to watch for slot content
-            this.waitForSlotContent();
-        } else {
-            this.initObserver();
-        }
-    });
-},
-    beforeUnmount() {
-        this.cleanupObserver();
-    },
-    methods: {
-        waitForSlotContent() {
-        const checkContent = () => {
-            if (this.$refs.observerRoot && this.$refs.observerRoot.children.length > 0) {
-                console.log('[jp-observer] Slot content ready, initializing');
-                this.initObserver();
-            } else {
-                // Keep checking
-                requestAnimationFrame(checkContent);
+        const rootMargin = computed(() => `${props.content?.rootMargin ?? 0}px`);
+        const threshold = computed(() => props.content?.threshold ?? 0);
+        const observerMode = computed(() => props.content?.observerMode || 'repeat');
+
+        const cleanupObserver = () => {
+            if (observer) {
+                observer.disconnect();
+                observer = null;
             }
         };
 
-        requestAnimationFrame(checkContent);
-    }
-        initObserver() {
-            // Check if IntersectionObserver is available (SSR compatibility)
-            if (typeof window === 'undefined' || !window.IntersectionObserver) {
-                console.warn('IntersectionObserver not available');
-                return;
-            }
-
-            // Clean up any existing observer
-            this.cleanupObserver();
-
-            // Create intersection observer
-            const options = {
-                root: null, // viewport
-                rootMargin: this.rootMargin,
-                threshold: this.threshold,
-            };
-
-            this.observer = new IntersectionObserver(this.handleIntersection, options);
-
-            // Observe the root element
-            if (this.$refs.observerRoot) {
-                this.observer.observe(this.$refs.observerRoot);
-            } else {
-                console.warn('[jp-observer] observerRoot ref not found');
-            }
-        },
-
-        handleIntersection(entries) {
+        const handleIntersection = entries => {
             entries.forEach(entry => {
-                const wasIntersecting = this.isIntersecting;
-                this.isIntersecting = entry.isIntersecting;
+                const wasIntersecting = intersectingValue.value;
+                const nowIntersecting = entry.isIntersecting;
 
-                // Update state
-                if (entry.isIntersecting) {
-                    this.$emit('add-state', 'intersecting');
+                setIntersecting(nowIntersecting);
+
+                if (nowIntersecting) {
+                    emit('add-state', 'intersecting');
                 } else {
-                    this.$emit('remove-state', 'intersecting');
+                    emit('remove-state', 'intersecting');
                 }
 
-                // Handle intersect event
-                if (entry.isIntersecting) {
-                    // Check if we should trigger based on mode
-                    if (this.observerMode === 'once' && this.hasTriggered) {
-                        return; // Already triggered once, skip
+                if (nowIntersecting) {
+                    if (observerMode.value === 'once' && hasTriggered.value) {
+                        return;
                     }
 
-                    this.hasTriggered = true;
+                    hasTriggered.value = true;
 
-                    this.$emit('trigger-event', {
+                    emit('trigger-event', {
                         name: 'intersect',
                         event: {
                             isIntersecting: true,
                             intersectionRatio: entry.intersectionRatio,
-                            boundingClientRect: entry.boundingClientRect,
+                            boundingClientRect: {
+                                top: entry.boundingClientRect.top,
+                                right: entry.boundingClientRect.right,
+                                bottom: entry.boundingClientRect.bottom,
+                                left: entry.boundingClientRect.left,
+                                width: entry.boundingClientRect.width,
+                                height: entry.boundingClientRect.height,
+                            },
                             time: entry.time,
                         },
                     });
 
-                    // If mode is 'once', disconnect after first trigger
-                    if (this.observerMode === 'once') {
-                        this.cleanupObserver();
+                    if (observerMode.value === 'once') {
+                        cleanupObserver();
                     }
-                } else if (wasIntersecting && !entry.isIntersecting) {
-                    // Element left viewport - emit leave event
-                    this.$emit('trigger-event', {
+                } else if (wasIntersecting && !nowIntersecting) {
+                    emit('trigger-event', {
                         name: 'leave',
                         event: {
                             isIntersecting: false,
@@ -170,26 +86,83 @@ export default {
                     });
                 }
             });
-        },
+        };
 
-        cleanupObserver() {
-            if (this.observer) {
-                this.observer.disconnect();
-                this.observer = null;
+        const initObserver = () => {
+            const frontWindow = wwLib.getFrontWindow();
+
+            if (!frontWindow?.IntersectionObserver) {
+                return;
             }
-        },
+
+            cleanupObserver();
+
+            const options = {
+                root: null,
+                rootMargin: rootMargin.value,
+                threshold: threshold.value,
+            };
+
+            observer = new frontWindow.IntersectionObserver(handleIntersection, options);
+
+            if (observerRoot.value) {
+                observer.observe(observerRoot.value);
+            }
+        };
+
+        const initWithDelay = () => {
+            setTimeout(() => {
+                if (observerRoot.value) {
+                    initObserver();
+                }
+            }, 100);
+        };
+
+        watch(
+            () => [props.content?.rootMargin, props.content?.threshold],
+            () => {
+                initObserver();
+            },
+            { deep: true }
+        );
+
+        watch(
+            () => props.content?.observerMode,
+            newMode => {
+                if (newMode === 'repeat') {
+                    hasTriggered.value = false;
+                }
+                initObserver();
+            }
+        );
+
+        onMounted(() => {
+            nextTick(() => {
+                initWithDelay();
+            });
+        });
+
+        onBeforeUnmount(() => {
+            cleanupObserver();
+        });
+
+        return {
+            observerRoot,
+            intersectingValue,
+        };
     },
 };
 </script>
 
 <style lang="scss" scoped>
 .ww-observer {
-    // Minimal base styling
-    // Users can add custom styles via WeWeb editor
+    width: 100%;
+    height: auto;
+    min-height: 1px;
+}
 
-    &.-intersecting {
-        // State class for custom styling
-        // No default styles - let users define via editor
-    }
+.observer-content {
+    width: 100%;
+    height: 100%;
 }
 </style>
