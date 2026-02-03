@@ -26,9 +26,12 @@ export default {
     editor: {
         label: {
             en: 'Intersection Observer',
+            en: 'Intersection Observer',
         },
         icon: 'eye',
+        icon: 'eye',
         bubble: {
+            icon: 'eye',
             icon: 'eye',
         },
     },
