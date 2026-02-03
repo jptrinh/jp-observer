@@ -12,9 +12,6 @@ export default {
         uid: { type: String, required: true },
         content: { type: Object, required: true },
         wwElementState: { type: Object, required: true },
-        /* wwEditor:start */
-        wwEditorState: { type: Object, required: false, default: null },
-        /* wwEditor:end */
     },
     emits: ['trigger-event', 'add-state', 'remove-state'],
     setup(props, { emit }) {
@@ -27,18 +24,6 @@ export default {
             name: 'intersecting',
             type: 'boolean',
             defaultValue: false,
-        });
-
-        const isEditing = computed(() => {
-            /* wwEditor:start */
-            if (typeof wwLib === 'undefined' || !wwLib.wwEditorHelper) {
-                return false;
-            }
-            const editMode = props.wwEditorState?.editMode;
-            return editMode === wwLib.wwEditorHelper.EDIT_MODES.EDITION;
-            /* wwEditor:end */
-            // eslint-disable-next-line no-unreachable
-            return false;
         });
 
         const rootMargin = computed(() => `${props.content?.rootMargin ?? 0}px`);
@@ -136,9 +121,7 @@ export default {
         watch(
             () => [props.content?.rootMargin, props.content?.threshold],
             () => {
-                if (!isEditing.value) {
-                    initObserver();
-                }
+                initObserver();
             },
             { deep: true }
         );
@@ -149,15 +132,11 @@ export default {
                 if (newMode === 'repeat') {
                     hasTriggered.value = false;
                 }
-                if (!isEditing.value) {
-                    initObserver();
-                }
+                initObserver();
             }
         );
 
         onMounted(() => {
-            if (isEditing.value) return;
-
             nextTick(() => {
                 initWithDelay();
             });
